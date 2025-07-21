@@ -10,6 +10,13 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Read API secret key from environment variables
+// This should be set in the deployment environment (e.g., Render.com)
+const API_SECRET_KEY = process.env.API_SECRET_KEY;
+if (!API_SECRET_KEY) {
+  console.warn('WARNING: API_SECRET_KEY environment variable is not set. API security is compromised!');
+}
+
 // Configure Express to parse JSON with a high limit for potentially large payloads
 app.use(express.json({ limit: '50mb' }));
 
@@ -36,8 +43,25 @@ app.get('/', (req, res) => {
  * - Store the job in a database or queue
  * - Potentially notify the client when processing is complete via webhook/socket
  * - Handle errors gracefully with retries and notifications
+ * 
+ * Security:
+ * - This endpoint is secured with an API key
+ * - The key must be provided in the x-api-key header
+ * - The key must match the API_SECRET_KEY environment variable
  */
 app.post('/create-video', (req, res) => {
+  // Check for API key in the request header
+  const apiKey = req.headers['x-api-key'];
+  
+  // Validate the API key
+  if (!apiKey || apiKey !== API_SECRET_KEY) {
+    // If key is missing or incorrect, return 401 Unauthorized
+    console.warn('Unauthorized access attempt to /create-video endpoint');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  // API key is valid, proceed with the request
+  
   // Log the received payload for debugging
   console.log('Received video creation request:', JSON.stringify(req.body, null, 2));
   
@@ -90,5 +114,11 @@ app.post('/create-video', (req, res) => {
 app.listen(PORT, () => {
   console.log(`FFmpeg Worker service running on port ${PORT}`);
   console.log(`Health check available at http://localhost:${PORT}/`);
-  console.log(`Video creation endpoint available at http://localhost:${PORT}/create-video`);
+  console.log(`Video creation endpoint available at http://localhost:${PORT}/create-video (requires x-api-key header)`);
+  
+  // Remind about API key if not set
+  if (!API_SECRET_KEY) {
+    console.log('\x1b[33m%s\x1b[0m', 'SECURITY WARNING: API_SECRET_KEY is not set. Set this environment variable to secure your API.');
+    console.log('Example: API_SECRET_KEY=your_secret_key node index.js');
+  }
 });
